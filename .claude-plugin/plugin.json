@@ -1,0 +1,7 @@
+{
+  "name": "skill-library",
+  "version": "0.1.0",
+  "description": "A pane that lists every installed skill as a searchable table, with its skillset, description, how to invoke it and a link when it has one",
+  "author": { "name": "PabloPicasserole" },
+  "types": "./types/index.d.ts"
+}

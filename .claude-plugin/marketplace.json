@@ -1,0 +1,6 @@
+{
+  "name": "skill-library-claude-code-mod",
+  "description": "Skill Library: a Claude Code mod that lists every installed skill in a searchable pane",
+  "owner": { "name": "PabloPicasserole" },
+  "plugins": [{ "name": "skill-library", "source": "./" }]
+}
