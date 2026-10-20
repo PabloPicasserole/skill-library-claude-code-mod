@@ -97,6 +97,8 @@ async function load($: EngineInterface) {
 // than one cell, so each row is counted as ROW_CELLS.
 const HEADER_CELLS = 8
 const ROW_CELLS = 1.3
+// Cells one scroll-bar arrow takes.
+const ARROW_CELLS = 1.3
 // Cells kept free for an open description when working out where the list ends.
 const CARD_RESERVE = 10
 
@@ -205,10 +207,17 @@ export const register: Register = on => {
     }
 
     // A scroll bar: one line per cell of the window, the thumb where the window is.
-    const lines = Math.max(1, space)
+    // The arrows at its ends are Buttons, the only element a click can press; each takes
+    // about ARROW_CELLS of the height, the track gets the rest.
+    const lines = Math.max(1, Math.floor(space - 2 * ARROW_CELLS))
     const size = list.length === 0 ? lines : Math.max(1, Math.round((shown.length / list.length) * lines))
     const start =
       list.length <= shown.length ? 0 : Math.round((top / (list.length - shown.length)) * (lines - size))
+    const last = lastOffset(list.length, space, pick !== null)
+    // A click moves a page, less one row so the eye keeps its place.
+    const page = (by: number) =>
+      update($, offset, cur => Math.max(0, Math.min(Math.min(cur, last) + by, last)))
+    const step = Math.max(1, shown.length - 1)
 
     // First click sorts ascending, second descending, third back to the default order.
     const press = (col: Col) => {
@@ -291,8 +300,12 @@ export const register: Register = on => {
             ))}
           </Box>
           {list.length > shown.length && (
-            <Box width={1} height={lines} marginLeft={1} flexDirection="column" backgroundColor="#444444">
-              <Box marginTop={start} height={size} backgroundColor="#9a9a9a" />
+            <Box marginLeft={1} flexDirection="column">
+              <Button key="page:up" label="▲" onPress={() => page(-step)} />
+              <Box width={1} height={lines} flexDirection="column" backgroundColor="#444444">
+                <Box marginTop={start} height={size} backgroundColor="#9a9a9a" />
+              </Box>
+              <Button key="page:down" label="▼" onPress={() => page(step)} />
             </Box>
           )}
         </Box>
