@@ -93,7 +93,7 @@ async function load($: EngineInterface) {
 // The pane draws its own window of rows so the header above them stays put.
 // Sizes are in the engine's cells; a graphical surface draws a button row taller
 // than one cell, so each row is counted as ROW_CELLS.
-const HEADER_CELLS = 10
+const HEADER_CELLS = 12
 const ROW_CELLS = 1.3
 // Cells kept free for an open description when working out where the list ends.
 const CARD_RESERVE = 10
@@ -236,7 +236,7 @@ export const register: Register = on => {
           <Button key="refresh" label="Refresh" onPress={() => load($)} />
         </Box>
         {list.length > shown.length && (
-          <Box gap={3}>
+          <Box gap={1} marginY={1}>
             <Button key="up" label="Up" onPress={() => move(-1)} />
             <Button key="down" label="Down" onPress={() => move(1)} />
             <Button key="pgup" label="Page up" onPress={() => move(-step)} />
