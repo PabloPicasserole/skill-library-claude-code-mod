@@ -94,8 +94,10 @@ async function load($: EngineInterface) {
 
 // Rows the pinned header takes: the count line, the hint, the search, its padding, the column heads.
 const HEADER_ROWS = 5
-// Rows kept free for an open detail card.
-const CARD_ROWS = 12
+// Rows the detail card at the bottom always takes, open or not, so the layout never jumps.
+const CARD_ROWS = 8
+// A graphical surface draws a row taller than one cell; use only part of the rows it reports.
+const FIT = 0.8
 
 type Order = { col: string; dir: string }
 
@@ -120,9 +122,9 @@ const arrange = (all: SkillRow[], typed: string, order: Order): SkillRow[] => {
   })
 }
 
-// How many skill rows fit under the header (less the card, when one is open).
-const roomFor = (bodyRows: number, hasCard: boolean): number =>
-  Math.max(3, bodyRows - HEADER_ROWS - (hasCard ? CARD_ROWS : 0))
+// How many skill rows fit between the pinned header and the detail card.
+const roomFor = (bodyRows: number): number =>
+  Math.max(3, Math.floor((bodyRows - HEADER_ROWS - CARD_ROWS) * FIT))
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -149,7 +151,7 @@ export const register: Register = on => {
   // wheel and the scroll keys move `offset`, and the engine's window stays at 0.
   on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const list = arrange(await read($, skills), await read($, query), await read($, sort))
-    const room = roomFor(e.bodyRows, (await read($, selected)) !== null)
+    const room = roomFor(e.bodyRows)
     const last = Math.max(0, list.length - room)
     await update($, offset, cur => Math.max(0, Math.min(Math.min(cur, last) + e.by, last)))
 
@@ -163,7 +165,8 @@ export const register: Register = on => {
     const typed = await read($, query)
     const order = await read($, sort)
     const list = arrange(all, typed, order)
-    const room = roomFor(e.props.scroll.bodyRows, pick !== null)
+    const room = roomFor(e.props.scroll.bodyRows)
+    const open = list.find(s => s.name === pick)
     const top = Math.min(await read($, offset), Math.max(0, list.length - room))
     const shown = list.slice(top, top + room)
     // First click sorts ascending, second descending, third back to the default order.
@@ -216,9 +219,9 @@ export const register: Register = on => {
         {list.length === 0 && (
           <Text dimColor>{all.length === 0 ? 'No skills loaded. Press Refresh.' : 'No match.'}</Text>
         )}
-        {shown.map(s => (
-          <Box key={`row:${s.name}`} flexDirection="column">
-            <Box>
+        <Box flexDirection="column" height={room} overflow="hidden">
+          {shown.map(s => (
+            <Box key={`row:${s.name}`}>
               <Box width={COLUMNS.name}>
                 <Button
                   key={`open:${s.name}`}
@@ -233,19 +236,23 @@ export const register: Register = on => {
               </Box>
               {s.link ? <Link href={s.link} label="repo" /> : <Text dimColor>-</Text>}
             </Box>
-            {pick === s.name && (
-              <Box flexDirection="column" borderStyle="round">
-                <Text bold>Invoke: /{s.name}</Text>
-                <Text>{s.description ?? 'No description available for this source.'}</Text>
-                <Text dimColor>
-                  {s.set === '' ? 'Standalone skill' : `Part of: ${s.set}`}
-                  {s.path ? `  |  ${s.path}` : ''}
-                </Text>
-                {s.link && <Link href={s.link} />}
-              </Box>
-            )}
-          </Box>
-        ))}
+          ))}
+        </Box>
+        <Box flexDirection="column" borderStyle="round" height={CARD_ROWS} overflow="hidden">
+          {open ? (
+            <>
+              <Text bold>Invoke: /{open.name}</Text>
+              <Text>{open.description ?? 'No description available for this source.'}</Text>
+              <Text dimColor>
+                {open.set === '' ? 'Standalone skill' : `Part of: ${open.set}`}
+                {open.path ? `  |  ${open.path}` : ''}
+              </Text>
+              {open.link && <Link href={open.link} />}
+            </>
+          ) : (
+            <Text dimColor>Click a skill above to see its description and how to invoke it.</Text>
+          )}
+        </Box>
       </Box>
     )
   })
