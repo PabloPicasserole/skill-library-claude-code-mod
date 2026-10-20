@@ -92,12 +92,13 @@ async function load($: EngineInterface) {
   await update($, skills, () => rows)
 }
 
-// Rows the pinned header takes: the count line, the hint, the search, its padding, the column heads.
-const HEADER_ROWS = 5
-// Rows the detail card at the bottom always takes, open or not, so the layout never jumps.
-const CARD_ROWS = 8
-// A graphical surface draws a row taller than one cell; use only part of the rows it reports.
-const FIT = 0.8
+// The pane draws its own window of rows so the header above them stays put.
+// Sizes are in the engine's cells; a graphical surface draws a button row taller
+// than one cell, so each row is counted as ROW_CELLS.
+const HEADER_CELLS = 8
+const ROW_CELLS = 1.3
+// Cells kept free for an open description when working out where the list ends.
+const CARD_RESERVE = 10
 
 type Order = { col: string; dir: string }
 
@@ -122,9 +123,33 @@ const arrange = (all: SkillRow[], typed: string, order: Order): SkillRow[] => {
   })
 }
 
-// How many skill rows fit between the pinned header and the detail card.
-const roomFor = (bodyRows: number): number =>
-  Math.max(3, Math.floor((bodyRows - HEADER_ROWS - CARD_ROWS) * FIT))
+// Cells the list may use: the body less the pinned header.
+const spaceFor = (bodyRows: number): number => Math.max(6, Math.floor(bodyRows - HEADER_CELLS))
+
+// The text of an open skill, as lines of at most `width` characters.
+const detail = (s: SkillRow): string[] => [
+  s.description ?? 'No description available for this source.',
+  `${s.set === '' ? 'Standalone skill' : `Part of: ${s.set}`}${s.path ? `  |  ${s.path}` : ''}`,
+]
+
+// Cells an open skill's description takes under its row.
+const cardCells = (s: SkillRow, columns: number): number => {
+  const width = Math.max(20, columns - 2)
+
+  return 2 + detail(s).reduce((n, text) => n + Math.max(1, Math.ceil(text.length / width)), 0) + (s.link ? 1 : 0)
+}
+
+// The furthest the list may scroll: the first row from which the rest still fit.
+const lastOffset = (count: number, space: number, hasCard: boolean): number => {
+  let used = hasCard ? CARD_RESERVE : 0
+  let fit = 0
+  while (fit < count && used + ROW_CELLS <= space) {
+    used += ROW_CELLS
+    fit += 1
+  }
+
+  return Math.max(0, count - Math.max(1, fit))
+}
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -147,12 +172,10 @@ export const register: Register = on => {
     }
   })
 
-  // The pane scrolls its own rows, so the header above them stays put: the
-  // wheel and the scroll keys move `offset`, and the engine's window stays at 0.
+  // The wheel and the scroll keys move `offset`; the engine's own window stays at 0.
   on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const list = arrange(await read($, skills), await read($, query), await read($, sort))
-    const room = roomFor(e.bodyRows)
-    const last = Math.max(0, list.length - room)
+    const last = lastOffset(list.length, spaceFor(e.bodyRows), (await read($, selected)) !== null)
     await update($, offset, cur => Math.max(0, Math.min(Math.min(cur, last) + e.by, last)))
 
     return {}
@@ -165,10 +188,29 @@ export const register: Register = on => {
     const typed = await read($, query)
     const order = await read($, sort)
     const list = arrange(all, typed, order)
-    const room = roomFor(e.props.scroll.bodyRows)
-    const open = list.find(s => s.name === pick)
-    const top = Math.min(await read($, offset), Math.max(0, list.length - room))
-    const shown = list.slice(top, top + room)
+    const space = spaceFor(e.props.scroll.bodyRows)
+    const columns = e.props.bodyColumns
+    const top = Math.min(await read($, offset), lastOffset(list.length, space, pick !== null))
+
+    // Take rows from `top` until the space is used; an open description counts too.
+    const shown: SkillRow[] = []
+    let used = 0
+    for (const s of list.slice(top)) {
+      const cost = ROW_CELLS + (s.name === pick ? cardCells(s, columns) : 0)
+      if (shown.length > 0 && used + cost > space) {
+        break
+      }
+      shown.push(s)
+      used += cost
+    }
+
+    // A scroll bar: one line per cell of the window, the thumb where the window is.
+    const lines = Math.max(1, space)
+    const size = list.length === 0 ? lines : Math.max(1, Math.round((shown.length / list.length) * lines))
+    const start =
+      list.length <= shown.length ? 0 : Math.round((top / (list.length - shown.length)) * (lines - size))
+    const bar = Array.from({ length: lines }, (_, i) => (i >= start && i < start + size ? '#' : '|')).join('\n')
+
     // First click sorts ascending, second descending, third back to the default order.
     const press = (col: Col) => {
       void update($, offset, () => 0)
@@ -188,11 +230,11 @@ export const register: Register = on => {
         <Box>
           <Text bold>
             {typed.trim() ? `${list.length} of ${all.length}` : all.length} skills
-            {list.length > room ? ` (${top + 1}-${top + shown.length})` : ''}{' '}
+            {list.length > shown.length ? ` (${top + 1}-${top + shown.length})` : ''}{' '}
           </Text>
           <Button key="refresh" label="Refresh" onPress={() => load($)} />
         </Box>
-        <Text dimColor>Click a skill to read it. Invoke any skill by typing /name in the prompt.</Text>
+        <Text dimColor>Click a skill to read it. Scroll with the wheel or arrow keys.</Text>
         <Box marginBottom={1}>
           <Input
             key="search"
@@ -219,39 +261,37 @@ export const register: Register = on => {
         {list.length === 0 && (
           <Text dimColor>{all.length === 0 ? 'No skills loaded. Press Refresh.' : 'No match.'}</Text>
         )}
-        <Box flexDirection="column" height={room} overflow="hidden">
-          {shown.map(s => (
-            <Box key={`row:${s.name}`}>
-              <Box width={COLUMNS.name}>
-                <Button
-                  key={`open:${s.name}`}
-                  label={`/${s.name}`}
-                  onPress={() => update($, selected, cur => (cur === s.name ? null : s.name))}
-                />
+        <Box height={space} overflow="hidden">
+          <Box flexDirection="column" flexGrow={1}>
+            {shown.map(s => (
+              <Box key={`row:${s.name}`} flexDirection="column">
+                <Box>
+                  <Box width={COLUMNS.name}>
+                    <Button
+                      key={`open:${s.name}`}
+                      label={`/${s.name}`}
+                      onPress={() => update($, selected, cur => (cur === s.name ? null : s.name))}
+                    />
+                  </Box>
+                  <Box width={COLUMNS.set}>
+                    <Text dimColor={s.set === ''} wrap="truncate">
+                      {s.set === '' ? '-' : s.set}
+                    </Text>
+                  </Box>
+                  {s.link ? <Link href={s.link} label="repo" /> : <Text dimColor>-</Text>}
+                </Box>
+                {pick === s.name && (
+                  <Box flexDirection="column" paddingLeft={1} paddingY={1}>
+                    <Text bold>Invoke: /{s.name}</Text>
+                    <Text>{detail(s)[0]}</Text>
+                    <Text dimColor>{detail(s)[1]}</Text>
+                    {s.link && <Link href={s.link} />}
+                  </Box>
+                )}
               </Box>
-              <Box width={COLUMNS.set}>
-                <Text dimColor={s.set === ''} wrap="truncate">
-                  {s.set === '' ? '-' : s.set}
-                </Text>
-              </Box>
-              {s.link ? <Link href={s.link} label="repo" /> : <Text dimColor>-</Text>}
-            </Box>
-          ))}
-        </Box>
-        <Box flexDirection="column" borderStyle="round" height={CARD_ROWS} overflow="hidden">
-          {open ? (
-            <>
-              <Text bold>Invoke: /{open.name}</Text>
-              <Text>{open.description ?? 'No description available for this source.'}</Text>
-              <Text dimColor>
-                {open.set === '' ? 'Standalone skill' : `Part of: ${open.set}`}
-                {open.path ? `  |  ${open.path}` : ''}
-              </Text>
-              {open.link && <Link href={open.link} />}
-            </>
-          ) : (
-            <Text dimColor>Click a skill above to see its description and how to invoke it.</Text>
-          )}
+            ))}
+          </Box>
+          <Text dimColor>{bar}</Text>
         </Box>
       </Box>
     )
