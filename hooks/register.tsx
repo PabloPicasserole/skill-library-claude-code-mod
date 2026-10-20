@@ -150,9 +150,9 @@ export const register: Register = on => {
             <Box>
               <Box width={COLUMNS.name}>
                 <Button
-                  key={s.name}
+                  key={`open:${s.name}`}
                   label={`/${s.name}`}
-                  onPress={() => update($, selected, () => (pick === s.name ? null : s.name))}
+                  onPress={() => update($, selected, cur => (cur === s.name ? null : s.name))}
                 />
               </Box>
               <Box width={COLUMNS.set}>
