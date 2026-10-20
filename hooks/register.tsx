@@ -27,8 +27,6 @@ const FAMILIES: Record<string, string> = {
   hairline: 'Hairline',
 }
 
-const COLUMNS = { name: 34, set: 20 }
-
 // One line of a SKILL.md's frontmatter, quotes removed.
 const front = (text: string, key: string): string | undefined => {
   const head = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? ''
@@ -190,6 +188,10 @@ export const register: Register = on => {
     const list = arrange(all, typed, order)
     const space = spaceFor(e.props.scroll.bodyRows)
     const columns = e.props.bodyColumns
+    // Column widths follow the pane, so the table lines up at any width.
+    const linkW = 7
+    const setW = Math.max(12, Math.min(20, Math.floor(columns * 0.3)))
+    const nameW = Math.max(16, columns - setW - linkW)
     const top = Math.min(await read($, offset), lastOffset(list.length, space, pick !== null))
 
     // Take rows from `top` until the space is used; an open description counts too.
@@ -234,13 +236,10 @@ export const register: Register = on => {
           <Button key="refresh" label="Refresh" onPress={() => load($)} />
         </Box>
         {list.length > shown.length && (
-          <Box>
+          <Box gap={3}>
             <Button key="up" label="Up" onPress={() => move(-1)} />
-            <Text> </Text>
             <Button key="down" label="Down" onPress={() => move(1)} />
-            <Text> </Text>
             <Button key="pgup" label="Page up" onPress={() => move(-step)} />
-            <Text> </Text>
             <Button key="pgdn" label="Page down" onPress={() => move(step)} />
           </Box>
         )}
@@ -260,13 +259,15 @@ export const register: Register = on => {
           />
         </Box>
         <Box>
-          <Box width={COLUMNS.name}>
+          <Box width={nameW}>
             <Button key="sort:name" label={head('name', 'Skill')} onPress={() => press('name')} />
           </Box>
-          <Box width={COLUMNS.set}>
+          <Box width={setW}>
             <Button key="sort:set" label={head('set', 'Skillset')} onPress={() => press('set')} />
           </Box>
-          <Button key="sort:link" label={head('link', 'Link')} onPress={() => press('link')} />
+          <Box width={linkW}>
+            <Button key="sort:link" label={head('link', 'Link')} onPress={() => press('link')} />
+          </Box>
         </Box>
         {list.length === 0 && (
           <Text dimColor>{all.length === 0 ? 'No skills loaded. Press Refresh.' : 'No match.'}</Text>
@@ -276,14 +277,14 @@ export const register: Register = on => {
             {shown.map(s => (
               <Box key={`row:${s.name}`} flexDirection="column">
                 <Box>
-                  <Box width={COLUMNS.name}>
+                  <Box width={nameW}>
                     <Button
                       key={`open:${s.name}`}
                       label={`/${s.name}`}
                       onPress={() => update($, selected, cur => (cur === s.name ? null : s.name))}
                     />
                   </Box>
-                  <Box width={COLUMNS.set}>
+                  <Box width={setW}>
                     <Text dimColor={s.set === ''} wrap="truncate">
                       {s.set === '' ? '-' : s.set}
                     </Text>
