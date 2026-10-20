@@ -7,6 +7,13 @@ const PANE = 'skill-library'
 const skills = atom({ plugin: 'skill-library', key: 'skills' } as const, [])
 const selected = atom({ plugin: 'skill-library', key: 'selected' } as const, null)
 const query = atom({ plugin: 'skill-library', key: 'query' } as const, '')
+const sort = atom({ plugin: 'skill-library', key: 'sort' } as const, { col: 'default', dir: 'asc' })
+
+type Col = 'name' | 'set' | 'link'
+
+// The text a column sorts on; an empty value always sorts last.
+const cell = (s: SkillRow, col: Col): string =>
+  col === 'name' ? s.name : col === 'set' ? s.set : (s.link ?? '')
 
 // Your own skills first, built-ins last.
 const ORDER = ['userSettings', 'projectSettings', 'plugin', 'syncedSkills', 'mcp', 'built-in']
@@ -24,7 +31,7 @@ const COLUMNS = { name: 34, set: 20 }
 // One line of a SKILL.md's frontmatter, quotes removed.
 const front = (text: string, key: string): string | undefined => {
   const head = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? ''
-  const line = new RegExp(`^${key}:\s*(.*)$`, 'm').exec(head)?.[1]?.trim()
+  const line = new RegExp(`^${key}:\\s*(.*)$`, 'm').exec(head)?.[1]?.trim()
 
   return line ? line.replace(/^["']|["']$/g, '') : undefined
 }
@@ -111,9 +118,33 @@ export const register: Register = on => {
     const pick = await read($, selected)
     const typed = await read($, query)
     const q = typed.trim().toLowerCase()
-    const list = q
+    const order = await read($, sort)
+    const found = q
       ? all.filter(s => `${s.name} ${s.set} ${s.description ?? ''}`.toLowerCase().includes(q))
       : all
+    const list =
+      order.col === 'default'
+        ? found
+        : [...found].sort((a, b) => {
+            const x = cell(a, order.col as Col)
+            const y = cell(b, order.col as Col)
+            if (x === '' || y === '') {
+              return (x === '' ? 1 : 0) - (y === '' ? 1 : 0)
+            }
+
+            return (order.dir === 'asc' ? 1 : -1) * x.localeCompare(y)
+          })
+    // First click sorts ascending, second descending, third back to the default order.
+    const press = (col: Col) =>
+      update($, sort, cur =>
+        cur.col !== col
+          ? { col, dir: 'asc' }
+          : cur.dir === 'asc'
+            ? { col, dir: 'desc' }
+            : { col: 'default', dir: 'asc' },
+      )
+    const head = (col: Col, label: string) =>
+      order.col === col ? `${label} ${order.dir === 'asc' ? '^' : 'v'}` : label
 
     return (
       <Box flexDirection="column">
@@ -135,12 +166,12 @@ export const register: Register = on => {
         />
         <Box>
           <Box width={COLUMNS.name}>
-            <Text bold>Skill</Text>
+            <Button key="sort:name" label={head('name', 'Skill')} onPress={() => press('name')} />
           </Box>
           <Box width={COLUMNS.set}>
-            <Text bold>Skillset</Text>
+            <Button key="sort:set" label={head('set', 'Skillset')} onPress={() => press('set')} />
           </Box>
-          <Text bold>Link</Text>
+          <Button key="sort:link" label={head('link', 'Link')} onPress={() => press('link')} />
         </Box>
         {list.length === 0 && (
           <Text dimColor>{all.length === 0 ? 'No skills loaded. Press Refresh.' : 'No match.'}</Text>
