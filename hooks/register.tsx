@@ -95,10 +95,8 @@ async function load($: EngineInterface) {
 // The pane draws its own window of rows so the header above them stays put.
 // Sizes are in the engine's cells; a graphical surface draws a button row taller
 // than one cell, so each row is counted as ROW_CELLS.
-const HEADER_CELLS = 8
+const HEADER_CELLS = 10
 const ROW_CELLS = 1.3
-// Cells one scroll-bar arrow takes.
-const ARROW_CELLS = 1.3
 // Cells kept free for an open description when working out where the list ends.
 const CARD_RESERVE = 10
 
@@ -206,16 +204,9 @@ export const register: Register = on => {
       used += cost
     }
 
-    // A scroll bar: one line per cell of the window, the thumb where the window is.
-    // The arrows at its ends are Buttons, the only element a click can press; each takes
-    // about ARROW_CELLS of the height, the track gets the rest.
-    const lines = Math.max(1, Math.floor(space - 2 * ARROW_CELLS))
-    const size = list.length === 0 ? lines : Math.max(1, Math.round((shown.length / list.length) * lines))
-    const start =
-      list.length <= shown.length ? 0 : Math.round((top / (list.length - shown.length)) * (lines - size))
+    // The buttons in the header move the list a row or a page, less one row so the eye keeps its place.
     const last = lastOffset(list.length, space, pick !== null)
-    // A click moves a page, less one row so the eye keeps its place.
-    const page = (by: number) =>
+    const move = (by: number) =>
       update($, offset, cur => Math.max(0, Math.min(Math.min(cur, last) + by, last)))
     const step = Math.max(1, shown.length - 1)
 
@@ -242,6 +233,17 @@ export const register: Register = on => {
           </Text>
           <Button key="refresh" label="Refresh" onPress={() => load($)} />
         </Box>
+        {list.length > shown.length && (
+          <Box>
+            <Button key="up" label="Up" onPress={() => move(-1)} />
+            <Text> </Text>
+            <Button key="down" label="Down" onPress={() => move(1)} />
+            <Text> </Text>
+            <Button key="pgup" label="Page up" onPress={() => move(-step)} />
+            <Text> </Text>
+            <Button key="pgdn" label="Page down" onPress={() => move(step)} />
+          </Box>
+        )}
         <Text dimColor>Click a skill to read it. Scroll with the wheel or arrow keys.</Text>
         <Box marginBottom={1}>
           <Input
@@ -299,15 +301,6 @@ export const register: Register = on => {
               </Box>
             ))}
           </Box>
-          {list.length > shown.length && (
-            <Box marginLeft={1} flexDirection="column">
-              <Button key="page:up" label="▲" onPress={() => page(-step)} />
-              <Box width={1} height={lines} flexDirection="column" backgroundColor="#444444">
-                <Box marginTop={start} height={size} backgroundColor="#9a9a9a" />
-              </Box>
-              <Button key="page:down" label="▼" onPress={() => page(step)} />
-            </Box>
-          )}
         </Box>
       </Box>
     )
