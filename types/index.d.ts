@@ -15,6 +15,7 @@ declare module 'claude-code' {
       skills: SkillRow[]
       selected: string | null
       query: string
+      offset: number
       sort: { col: string; dir: string }
     }
   }
