@@ -209,7 +209,6 @@ export const register: Register = on => {
     const size = list.length === 0 ? lines : Math.max(1, Math.round((shown.length / list.length) * lines))
     const start =
       list.length <= shown.length ? 0 : Math.round((top / (list.length - shown.length)) * (lines - size))
-    const bar = Array.from({ length: lines }, (_, i) => (i >= start && i < start + size ? '#' : '|')).join('\n')
 
     // First click sorts ascending, second descending, third back to the default order.
     const press = (col: Col) => {
@@ -291,7 +290,11 @@ export const register: Register = on => {
               </Box>
             ))}
           </Box>
-          <Text dimColor>{bar}</Text>
+          {list.length > shown.length && (
+            <Box width={1} height={lines} marginLeft={1} flexDirection="column" backgroundColor="#444444">
+              <Box marginTop={start} height={size} backgroundColor="#9a9a9a" />
+            </Box>
+          )}
         </Box>
       </Box>
     )
